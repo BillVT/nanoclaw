@@ -268,6 +268,18 @@ async function buildContainerArgs(
       args.push('-v', `${mount.hostPath}:${mount.containerPath}`);
     }
   }
+  
+  // Rootless Docker: connect to OneCLI network and fix proxy hostname.
+  // In rootless Docker, host.docker.internal is not reachable from containers.
+  // Connect to the OneCLI compose network so the agent can reach the proxy
+  // via the container name instead.
+  args.push('--network', 'onecli_onecli');
+  for (let i = 0; i < args.length; i++) {
+    // Only replace in -e (env var) arguments, not in --add-host
+    if (i > 0 && args[i - 1] === '-e' && typeof args[i] === 'string' && args[i].includes('host.docker.internal')) {
+      args[i] = args[i].replace(/host\.docker\.internal/g, 'onecli-app-1');
+    }
+  }
 
   args.push(CONTAINER_IMAGE);
 
