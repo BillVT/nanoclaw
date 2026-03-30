@@ -35,6 +35,7 @@ import {
   getAllSessions,
   getAllTasks,
   getLastBotMessageTimestamp,
+  deleteSession,
   getMessagesSince,
   getNewMessages,
   getRouterState,
@@ -402,6 +403,47 @@ async function runAgent(
     }
 
     if (output.status === 'error') {
+      // If the session ID is stale (Claude lost the transcript), clear it and
+      // retry once with a fresh session rather than looping on the same error.
+      if (sessionId && output.error?.includes('No conversation found')) {
+        logger.warn(
+          { group: group.name, sessionId },
+          'Stale session detected, clearing and retrying with fresh session',
+        );
+        delete sessions[group.folder];
+        deleteSession(group.folder);
+
+        const retryOutput = await runContainerAgent(
+          group,
+          {
+            prompt,
+            sessionId: undefined,
+            groupFolder: group.folder,
+            chatJid,
+            isMain,
+            assistantName: ASSISTANT_NAME,
+          },
+          (proc, containerName) =>
+            queue.registerProcess(chatJid, proc, containerName, group.folder),
+          wrappedOnOutput,
+        );
+
+        if (retryOutput.newSessionId) {
+          sessions[group.folder] = retryOutput.newSessionId;
+          setSession(group.folder, retryOutput.newSessionId);
+        }
+
+        if (retryOutput.status === 'error') {
+          logger.error(
+            { group: group.name, error: retryOutput.error },
+            'Container agent error after session reset',
+          );
+          return 'error';
+        }
+
+        return 'success';
+      }
+
       logger.error(
         { group: group.name, error: output.error },
         'Container agent error',
