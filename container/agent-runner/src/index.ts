@@ -60,6 +60,12 @@ const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
 const IPC_POLL_MS = 500;
 
+// Google Drive MCP server — enabled when credentials are mounted
+const GOOGLE_DRIVE_CREDS_DIR = '/home/node/.config/google-drive';
+const hasGoogleDrive =
+  fs.existsSync(path.join(GOOGLE_DRIVE_CREDS_DIR, 'credentials.json')) &&
+  fs.existsSync(path.join(GOOGLE_DRIVE_CREDS_DIR, 'token.json'));
+
 /**
  * Push-based async iterable for streaming user messages to the SDK.
  * Keeps the iterable alive until end() is called, preventing isSingleUserTurn.
@@ -409,7 +415,8 @@ async function runQuery(
         'TeamCreate', 'TeamDelete', 'SendMessage',
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
-        'mcp__nanoclaw__*'
+        'mcp__nanoclaw__*',
+        ...(hasGoogleDrive ? ['mcp__googledrive__*'] : []),
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -425,6 +432,14 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
+        ...(hasGoogleDrive
+          ? {
+              googledrive: {
+                command: 'node',
+                args: ['/app/mcp-servers/google-drive/dist/index.js'],
+              },
+            }
+          : {}),
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],

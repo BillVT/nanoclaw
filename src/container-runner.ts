@@ -4,6 +4,7 @@
  */
 import { ChildProcess, spawn } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import {
@@ -210,6 +211,24 @@ function buildVolumeMounts(
     readonly: false,
   });
 
+  // Google Drive credentials (read-write to allow token refresh)
+  const googleDriveCredsDir = path.join(
+    os.homedir(),
+    '.config',
+    'nanoclaw',
+    'google-drive',
+  );
+  if (
+    fs.existsSync(path.join(googleDriveCredsDir, 'credentials.json')) &&
+    fs.existsSync(path.join(googleDriveCredsDir, 'token.json'))
+  ) {
+    mounts.push({
+      hostPath: googleDriveCredsDir,
+      containerPath: '/home/node/.config/google-drive',
+      readonly: false,
+    });
+  }
+
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {
     const validatedMounts = validateAdditionalMounts(
@@ -268,7 +287,7 @@ async function buildContainerArgs(
       args.push('-v', `${mount.hostPath}:${mount.containerPath}`);
     }
   }
-  
+
   // Rootless Docker: connect to OneCLI network and fix proxy hostname.
   // In rootless Docker, host.docker.internal is not reachable from containers.
   // Connect to the OneCLI compose network so the agent can reach the proxy
@@ -276,7 +295,12 @@ async function buildContainerArgs(
   args.push('--network', 'onecli_onecli');
   for (let i = 0; i < args.length; i++) {
     // Only replace in -e (env var) arguments, not in --add-host
-    if (i > 0 && args[i - 1] === '-e' && typeof args[i] === 'string' && args[i].includes('host.docker.internal')) {
+    if (
+      i > 0 &&
+      args[i - 1] === '-e' &&
+      typeof args[i] === 'string' &&
+      args[i].includes('host.docker.internal')
+    ) {
       args[i] = args[i].replace(/host\.docker\.internal/g, 'onecli-app-1');
     }
   }

@@ -36,6 +36,16 @@ RUN npm install -g agent-browser @anthropic-ai/claude-code
 # Create app directory
 WORKDIR /app
 
+# Build Google Drive MCP server
+WORKDIR /app/mcp-servers/google-drive
+COPY mcp-servers/google-drive/package*.json ./
+RUN npm install
+COPY mcp-servers/google-drive/ ./
+RUN npm run build
+
+# Build agent runner
+WORKDIR /app
+
 # Copy package files first for better caching
 COPY agent-runner/package*.json ./
 
